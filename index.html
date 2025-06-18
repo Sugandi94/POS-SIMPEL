@@ -422,10 +422,8 @@
 
 
     <script>
-        const productsKey = 'pos_products';
-        const categoriesKey = 'pos_categories'; // New key for categories
         let products = [];
-        let categories = []; // New array for categories
+        let categories = [];
         let cart = [];
         let currentPage = 'pos'; // Default starting page
 
@@ -440,7 +438,6 @@
         // Global variables to temporarily store Base64 image data for add/edit forms
         let currentAddProductImageBase64 = '';
         let currentEditProductImageBase64 = '';
-
 
         // General UI elements
         const messageBox = document.getElementById('message-box');
@@ -467,107 +464,6 @@
         const productSellingPriceInput = document.getElementById('product-selling-price');
         const productStockInput = document.getElementById('product-stock');
         const productCategorySelect = document.getElementById('product-category'); // New select for category
-        const excelFileInput = document.getElementById('excel-file-input');
-        const importExcelButton = document.getElementById('import-excel-button');
-
-        // POS interface elements (now specifically for grid view)
-        const productGridListDiv = document.getElementById('product-grid-list');
-        const noProductsMessagePos = document.getElementById('no-products-message-pos');
-        const barcodeScannerInput = document.getElementById('barcode-scanner-input');
-        const scanBarcodeButton = document.getElementById('scan-barcode-button');
-        const cartItemsDiv = document.getElementById('cart-items');
-        const emptyCartMessage = document.getElementById('empty-cart-message');
-        const cartTotalSpan = document.getElementById('cart-total');
-        const checkoutButton = document.getElementById('checkout-button');
-        const clearCartButton = document.getElementById('clear-cart-button');
-
-        // Edit Product Modal elements
-        const editProductModal = document.getElementById('edit-product-modal');
-        const editProductForm = document.getElementById('edit-product-form');
-        const editProductIdInput = document.getElementById('edit-product-id');
-        const editProductNameInput = document.getElementById('edit-product-name');
-        const editProductImageURLInput = document.getElementById('edit-product-image-url');
-        const editProductImageFileInput = document.getElementById('edit-product-image-file');
-        const editProductImagePreview = document.getElementById('edit-product-image-preview');
-        const editProductImagePreviewContainer = document.getElementById('edit-product-image-preview-container');
-        const editProductBarcodeInput = document.getElementById('edit-product-barcode');
-        const editProductPurchasePriceInput = document.getElementById('edit-product-purchase-price');
-        const editProductSellingPriceInput = document.getElementById('edit-product-selling-price');
-        const editProductStockInput = document.getElementById('edit-product-stock');
-        const editProductCategorySelect = document.getElementById('edit-product-category'); // New select for category
-        const cancelEditButton = document.getElementById('cancel-edit');
-
-        // New elements for Product Table List
-        const productTableContainer = document.getElementById('product-table-container');
-        const noProductsMessageManagement = document.getElementById('no-products-message-management');
-        const productsPerPageSelect = document.getElementById('products-per-page'); // New select for products per page
-        const productPrevPageButton = document.getElementById('product-prev-page'); // New button for product pagination
-        const productNextPageButton = document.getElementById('product-next-page'); // New button for product pagination
-        const productPageInfoSpan = document.getElementById('product-page-info'); // New span for product page info
-        const productPaginationControls = document.getElementById('product-pagination-controls');
-
-
-        // New elements for Category Management
-        const categoryForm = document.getElementById('category-form');
-        const categoryNameInput = document.getElementById('category-name');
-        const categorySearchInput = document.getElementById('category-search-input');
-        const categorySearchButton = document.getElementById('category-search-button');
-        const categoryTableContainer = document.getElementById('category-table-container');
-        const noCategoriesMessage = document.getElementById('no-categories-message');
-        const editCategoryModal = document.getElementById('edit-category-modal');
-        const editCategoryForm = document.getElementById('edit-category-form');
-        const editCategoryIdInput = document.getElementById('edit-category-id');
-        const editCategoryNameInput = document.getElementById('edit-category-name');
-        const cancelCategoryEditButton = document.getElementById('cancel-category-edit');
-        const categoriesPerPageSelect = document.getElementById('categories-per-page'); // New select for categories per page
-        const categoryPrevPageButton = document.getElementById('category-prev-page'); // New button for category pagination
-        const categoryNextPageButton = document.getElementById('category-next-page'); // New button for category pagination
-        const categoryPageInfoSpan = document.getElementById('category-page-info'); // New span for category page info
-        const categoryPaginationControls = document.getElementById('category-pagination-controls');
-
-
-        // --- Utility Functions ---
-
-        /**
-         * Generates a unique ID (simple UUID-like for demo purposes).
-         * @returns {string} A unique ID string.
-         */
-        function generateUniqueId() {
-            return '_' + Math.random().toString(36).substr(2, 9);
-        }
-
-        /**
-         * Formats a number as Indonesian Rupiah.
-         * @param {number} amount - The amount to format.
-         * @returns {string} Formatted string, e.g., "Rp 15.000".
-         */
-        function formatRupiah(amount) {
-            return new Intl.NumberFormat('id-ID', {
-                style: 'currency',
-                currency: 'IDR',
-                minimumFractionDigits: 0
-            }).format(amount);
-        }
-
-        /**
-         * Displays a message in the message box.
-         * @param {string} message - The message to display.
-         * @param {string} type - 'success', 'error', or 'info' for styling.
-         */
-        function showMessage(message, type = 'info') {
-            messageBox.textContent = message;
-            messageBox.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800', 'bg-blue-100', 'text-blue-800');
-            if (type === 'success') {
-                messageBox.classList.add('bg-green-100', 'text-green-800');
-            } else if (type === 'error') {
-                messageBox.classList.add('bg-red-100', 'text-red-800');
-            } else {
-                messageBox.classList.add('bg-blue-100', 'text-blue-800');
-            }
-            setTimeout(() => {
-                messageBox.classList.add('hidden');
-            }, 3000); // Hide after 3 seconds
-        }
 
         // --- Page Navigation ---
 
@@ -633,18 +529,28 @@
         // --- Product Management (Local Storage) ---
 
         /**
-         * Loads products from local storage.
+         * Loads products from server.
          */
-        function loadProducts() {
-            const storedProducts = localStorage.getItem(productsKey);
-            products = storedProducts ? JSON.parse(storedProducts) : [];
+        async function loadProducts() {
+            try {
+                const response = await fetch('/api/products');
+                if (!response.ok) throw new Error('Network response was not ok');
+                products = await response.json();
+                renderProductsGrid();
+                renderProductsTable();
+                renderCart();
+            } catch (error) {
+                showMessage('Gagal memuat produk dari server.', 'error');
+                console.error('Error loading products:', error);
+            }
         }
 
         /**
-         * Saves products to local storage.
+         * Saves products to server.
+         * This function is no longer used as individual API calls are made for CRUD operations.
          */
         function saveProducts() {
-            localStorage.setItem(productsKey, JSON.stringify(products));
+            // No longer used
         }
 
         /**
@@ -883,7 +789,7 @@
          * Handles adding a new product.
          * @param {Event} e - The form submission event.
          */
-        productForm.addEventListener('submit', (e) => {
+        productForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const name = productNameInput.value.trim();
@@ -928,35 +834,56 @@
                 category // Add category to product object
             };
 
-            products.push(newProduct);
-            saveProducts();
-            renderProductsGrid(); // Update POS grid
-            renderProductsTable(); // Update management table
-            productForm.reset();
-            // Reset image inputs after successful add
-            productImageURLInput.value = '';
-            productImageFileInput.value = '';
-            currentAddProductImageBase64 = '';
-            productImagePreview.src = '';
-            productImagePreviewContainer.classList.add('hidden');
-            productCategorySelect.value = ''; // Reset category select
-            showMessage('Produk berhasil ditambahkan!', 'success');
+            try {
+                const response = await fetch('/api/products', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newProduct)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to add product');
+                }
+                const addedProduct = await response.json();
+                products.push(addedProduct);
+                renderProductsGrid();
+                renderProductsTable();
+                productForm.reset();
+                // Reset image inputs after successful add
+                productImageURLInput.value = '';
+                productImageFileInput.value = '';
+                currentAddProductImageBase64 = '';
+                productImagePreview.src = '';
+                productImagePreviewContainer.classList.add('hidden');
+                productCategorySelect.value = ''; // Reset category select
+                showMessage('Produk berhasil ditambahkan!', 'success');
+            } catch (error) {
+                showMessage(`Gagal menambahkan produk: ${error.message}`, 'error');
+            }
         });
 
         /**
          * Deletes a product by ID.
          * @param {string} productId - The ID of the product to delete.
          */
-        function deleteProduct(productId) {
+        async function deleteProduct(productId) {
             if (confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
-                products = products.filter(p => p.id !== productId);
-                saveProducts();
-                renderProductsGrid(); // Update POS grid
-                renderProductsTable(); // Update management table
-                // Also remove from cart if present
-                cart = cart.filter(item => item.id !== productId);
-                renderCart();
-                showMessage('Produk berhasil dihapus!', 'success');
+                try {
+                    const response = await fetch(`/api/products/${productId}`, { method: 'DELETE' });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to delete product');
+                    }
+                    products = products.filter(p => p.id !== productId);
+                    renderProductsGrid();
+                    renderProductsTable();
+                    // Also remove from cart if present
+                    cart = cart.filter(item => item.id !== productId);
+                    renderCart();
+                    showMessage('Produk berhasil dihapus!', 'success');
+                } catch (error) {
+                    showMessage(`Gagal menghapus produk: ${error.message}`, 'error');
+                }
             }
         }
 
@@ -1044,7 +971,7 @@
          * Handles the submission of the edit product form.
          * @param {Event} e - The form submission event.
          */
-        editProductForm.addEventListener('submit', (e) => {
+        editProductForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const id = editProductIdInput.value;
@@ -1074,7 +1001,7 @@
 
             const productIndex = products.findIndex(p => p.id === id);
             if (productIndex > -1) {
-                products[productIndex] = {
+                const updatedProduct = {
                     ...products[productIndex], // Keep barcode as it's not editable
                     name,
                     image, // Use the determined image source (URL or Base64)
@@ -1083,18 +1010,32 @@
                     stock,
                     category // Update category
                 };
-                saveProducts();
-                renderProductsGrid(); // Update POS grid
-                renderProductsTable(); // Update management table
-                renderCart(); // Re-render cart in case prices changed
-                editProductModal.classList.add('hidden');
-                // Clear temporary Base64 state and image previews after update
-                currentEditProductImageBase64 = '';
-                editProductImagePreview.src = '';
-                editProductImagePreviewContainer.classList.add('hidden');
-                editProductImageURLInput.value = '';
-                editProductImageFileInput.value = '';
-                showMessage('Produk berhasil diperbarui!', 'success');
+                try {
+                    const response = await fetch(`/api/products/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(updatedProduct)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to update product');
+                    }
+                    const updated = await response.json();
+                    products[productIndex] = updated;
+                    renderProductsGrid();
+                    renderProductsTable();
+                    renderCart();
+                    editProductModal.classList.add('hidden');
+                    // Clear temporary Base64 state and image previews after update
+                    currentEditProductImageBase64 = '';
+                    editProductImagePreview.src = '';
+                    editProductImagePreviewContainer.classList.add('hidden');
+                    editProductImageURLInput.value = '';
+                    editProductImageFileInput.value = '';
+                    showMessage('Produk berhasil diperbarui!', 'success');
+                } catch (error) {
+                    showMessage(`Gagal memperbarui produk: ${error.message}`, 'error');
+                }
             } else {
                 showMessage('Produk tidak ditemukan.', 'error');
             }
@@ -1504,18 +1445,26 @@
         // --- Category Management Functions (New) ---
 
         /**
-         * Loads categories from local storage.
+         * Loads categories from server.
          */
-        function loadCategories() {
-            const storedCategories = localStorage.getItem(categoriesKey);
-            categories = storedCategories ? JSON.parse(storedCategories) : [];
+        async function loadCategories() {
+            try {
+                const response = await fetch('/api/categories');
+                if (!response.ok) throw new Error('Network response was not ok');
+                categories = await response.json();
+                populateCategoryDropdowns();
+            } catch (error) {
+                showMessage('Gagal memuat kategori dari server.', 'error');
+                console.error('Error loading categories:', error);
+            }
         }
 
         /**
-         * Saves categories to local storage.
+         * Saves categories to server.
+         * This function is no longer used as individual API calls are made for CRUD operations.
          */
         function saveCategories() {
-            localStorage.setItem(categoriesKey, JSON.stringify(categories));
+            // No longer used
         }
 
         /**
@@ -1636,7 +1585,7 @@
          * Handles adding a new category.
          * @param {Event} e - The form submission event.
          */
-        categoryForm.addEventListener('submit', (e) => {
+        categoryForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = categoryNameInput.value.trim();
 
@@ -1651,12 +1600,26 @@
                 return;
             }
 
-            categories.push({ id: generateUniqueId(), name: name });
-            saveCategories();
-            renderCategoriesTable();
-            populateCategoryDropdowns(); // Update product forms dropdowns
-            categoryForm.reset();
-            showMessage('Kategori berhasil ditambahkan!', 'success');
+            const newCategory = { id: generateUniqueId(), name: name };
+            try {
+                const response = await fetch('/api/categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newCategory)
+                });
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to add category');
+                }
+                const addedCategory = await response.json();
+                categories.push(addedCategory);
+                renderCategoriesTable();
+                populateCategoryDropdowns(); // Update product forms dropdowns
+                categoryForm.reset();
+                showMessage('Kategori berhasil ditambahkan!', 'success');
+            } catch (error) {
+                showMessage(`Gagal menambahkan kategori: ${error.message}`, 'error');
+            }
         });
 
         /**
@@ -1732,7 +1695,7 @@
          * If a category is deleted, products associated with it will have their category set to empty.
          * @param {string} categoryId - The ID of the category to delete.
          */
-        function deleteCategory(categoryId) {
+        async function deleteCategory(categoryId) {
             // Check if any products are associated with this category
             const productsInCategory = products.filter(p => p.category === categoryId);
             if (productsInCategory.length > 0) {
@@ -1745,26 +1708,46 @@
                         p.category = ''; // Set category to empty string
                     }
                 });
-                saveProducts(); // Save updated products
+                try {
+                    // Update products on server
+                    for (const p of productsInCategory) {
+                        const updatedProduct = { ...p, category: '' };
+                        await fetch(`/api/products/${p.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(updatedProduct)
+                        });
+                    }
+                } catch (error) {
+                    showMessage(`Gagal memperbarui produk terkait kategori: ${error.message}`, 'error');
+                    return;
+                }
             }
 
             if (confirm('Apakah Anda yakin ingin menghapus kategori ini?')) {
-                categories = categories.filter(cat => cat.id !== categoryId);
-                saveCategories();
-                renderCategoriesTable();
-                populateCategoryDropdowns(); // Update product forms dropdowns
-                renderProductsGrid(); // Refresh product display in case category name was shown
-                renderProductsTable(); // Refresh product table in case category name was shown
-                showMessage('Kategori berhasil dihapus!', 'success');
+                try {
+                    const response = await fetch(`/api/categories/${categoryId}`, { method: 'DELETE' });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to delete category');
+                    }
+                    categories = categories.filter(cat => cat.id !== categoryId);
+                    renderCategoriesTable();
+                    populateCategoryDropdowns(); // Update product forms dropdowns
+                    renderProductsGrid(); // Refresh product display in case category name was shown
+                    renderProductsTable(); // Refresh product table in case category name was shown
+                    showMessage('Kategori berhasil dihapus!', 'success');
+                } catch (error) {
+                    showMessage(`Gagal menghapus kategori: ${error.message}`, 'error');
+                }
             }
         }
 
 
         // --- Initial Load ---
-        document.addEventListener('DOMContentLoaded', () => {
-            loadProducts();
-            loadCategories(); // Load categories on initial load
-            populateCategoryDropdowns(); // Populate category dropdowns after loading categories
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadProducts();
+            await loadCategories();
             showPage(currentPage); // Show the initial page (POS)
         });
     </script>
