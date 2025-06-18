@@ -1,0 +1,1772 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi POS Sederhana</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- XLSX Library CDN for reading Excel files -->
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <!-- Font Awesome CDN for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Gray-100 */
+        }
+        /* Custom scrollbar for product list */
+        .overflow-y-auto::-webkit-scrollbar {
+            width: 8px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-track {
+            background: #e0e0e0; /* Light gray */
+            border-radius: 10px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+            background: #a0a0a0; /* Medium gray */
+            border-radius: 10px;
+        }
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+            background: #808080; /* Darker gray on hover */
+        }
+        .sidebar {
+            width: 250px; /* Fixed width for sidebar on larger screens */
+        }
+        @media (max-width: 1023px) { /* Adjust for smaller screens (lg breakpoint in Tailwind) */
+            .sidebar {
+                width: 100%; /* Full width for sidebar on small screens */
+                height: auto; /* Auto height */
+                position: relative; /* Make it flow normally */
+                margin-bottom: 1rem; /* Add some space below it */
+            }
+        }
+        /* Table styling for responsiveness */
+        .product-table-container, .category-table-container {
+            overflow-x: auto; /* Enable horizontal scrolling on small screens */
+            -webkit-overflow-scrolling: touch; /* Smooth scrolling for iOS */
+            max-height: 400px; /* Max height for vertical scrolling */
+            overflow-y: auto; /* Enable vertical scrolling */
+        }
+        .product-table, .category-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .product-table th, .product-table td,
+        .category-table th, .category-table td {
+            padding: 0.75rem; /* 12px */
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb; /* Gray-200 */
+        }
+        .product-table th, .category-table th {
+            background-color: #f9fafb; /* Gray-50 */
+            font-weight: 600;
+            color: #4b5563; /* Gray-700 */
+            text-transform: uppercase;
+            font-size: 0.75rem; /* text-xs */
+            letter-spacing: 0.05em; /* tracking-wider */
+            position: sticky; /* Sticky header */
+            top: 0; /* Stick to the top */
+            z-index: 10; /* Ensure it's above scrolling content */
+        }
+        .product-table tbody tr:hover,
+        .category-table tbody tr:hover {
+            background-color: #f3f4f6; /* Gray-100 */
+        }
+        .product-table img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 9999px; /* rounded-full */
+        }
+        /* Adjusted button padding for icons */
+        .icon-button {
+            padding: 0.5rem 0.75rem; /* Adjust padding for icon-only buttons */
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 lg:p-8">
+    <div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg flex flex-col lg:flex-row min-h-[80vh]">
+        <!-- Sidebar -->
+        <aside class="sidebar bg-gray-800 text-white rounded-l-xl p-6 flex flex-col items-center lg:items-start lg:rounded-r-none lg:rounded-bl-xl">
+            <h2 class="text-2xl font-bold mb-8 text-center lg:text-left">Menu POS</h2>
+            <nav class="flex flex-col space-y-4 w-full">
+                <button id="nav-pos" class="nav-button px-6 py-3 rounded-md text-lg font-semibold hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150 text-left active-nav-button">
+                    Point of Sale
+                </button>
+                <button id="nav-products" class="nav-button px-6 py-3 rounded-md text-lg font-semibold hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150 text-left">
+                    Manajemen Produk
+                </button>
+                <button id="nav-categories" class="nav-button px-6 py-3 rounded-md text-lg font-semibold hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150 text-left">
+                    Manajemen Kategori
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 p-6 sm:p-8 lg:p-10">
+            <h1 class="text-3xl sm:text-4xl font-bold text-center text-gray-800 mb-8">Aplikasi Point of Sale</h1>
+
+            <!-- Message Box (Global) -->
+            <div id="message-box" class="mt-4 p-3 text-sm text-center rounded-md hidden"></div>
+
+            <!-- POS Page Section -->
+            <section id="page-pos" class="page-content">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Product List (Grid View for POS) -->
+                    <div class="lg:col-span-2 bg-gray-50 p-6 rounded-lg shadow-inner">
+                        <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Produk Tersedia</h2>
+                        <div class="flex items-center mb-4">
+                            <input type="text" id="barcode-scanner-input" placeholder="Scan atau masukkan Barcode"
+                                class="flex-grow px-4 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <button id="scan-barcode-button"
+                                class="px-4 py-2 bg-purple-600 text-white rounded-r-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                Cari
+                            </button>
+                        </div>
+                        <div id="product-grid-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 overflow-y-auto max-h-96 pr-2">
+                            <!-- Product cards will be rendered here -->
+                        </div>
+                        <div id="no-products-message-pos" class="text-center text-gray-500 mt-8 hidden">Belum ada produk. Tambahkan produk dari bagian Manajemen Produk.</div>
+                    </div>
+
+                    <!-- Cart Section -->
+                    <div class="lg:col-span-1 bg-gray-50 p-6 rounded-lg shadow-inner">
+                        <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Keranjang Belanja</h2>
+                        <div id="cart-items" class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                            <!-- Cart items will be rendered here -->
+                            <div id="empty-cart-message" class="text-center text-gray-500 mt-4">Keranjang kosong.</div>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-gray-200">
+                            <div class="flex justify-between items-center text-xl font-bold text-gray-800">
+                                <span>Total:</span>
+                                <span id="cart-total">Rp 0</span>
+                            </div>
+                            <button id="checkout-button"
+                                class="mt-6 w-full px-6 py-3 bg-green-600 text-white font-semibold rounded-md shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                                Selesai Transaksi
+                            </button>
+                            <button id="clear-cart-button"
+                                class="mt-3 w-full px-6 py-3 bg-red-600 text-white font-semibold rounded-md shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition ease-in-out duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled>
+                                Bersihkan Keranjang
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Product Management Page Section -->
+            <section id="page-products" class="page-content hidden">
+                <div class="p-6 bg-gray-50 rounded-lg shadow-inner">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Manajemen Produk</h2>
+                    <form id="product-form" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div>
+                            <label for="product-name" class="block text-sm font-medium text-gray-700 mb-1">Nama Produk</label>
+                            <input type="text" id="product-name" placeholder="Contoh: Kopi Bubuk" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="product-image-url" class="block text-sm font-medium text-gray-700 mb-1">URL Gambar (Opsional)</label>
+                            <input type="url" id="product-image-url" placeholder="https://placehold.co/150x150"
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <p class="text-xs text-gray-500 mt-1">Atau unggah gambar dari komputer Anda:</p>
+                            <input type="file" id="product-image-file" accept="image/*"
+                                class="mt-2 block w-full text-sm text-gray-500
+                                        file:mr-4 file:py-2 file:px-4
+                                        file:rounded-full file:border-0
+                                        file:text-sm file:font-semibold
+                                        file:bg-indigo-50 file:text-indigo-700
+                                        hover:file:bg-indigo-100">
+                            <div id="product-image-preview-container" class="mt-2 flex justify-center items-center h-24 w-24 border border-gray-300 rounded-md overflow-hidden bg-gray-100 hidden">
+                                <img id="product-image-preview" src="" alt="Pratinjau Gambar" class="h-full w-full object-cover">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="product-barcode" class="block text-sm font-medium text-gray-700 mb-1">Barcode (Unik)</label>
+                            <input type="text" id="product-barcode" placeholder="Contoh: 1234567890" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="product-purchase-price" class="block text-sm font-medium text-gray-700 mb-1">Harga Beli (Rp)</label>
+                            <input type="number" id="product-purchase-price" placeholder="Contoh: 10000" min="0" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="product-selling-price" class="block text-sm font-medium text-gray-700 mb-1">Harga Jual (Rp)</label>
+                            <input type="number" id="product-selling-price" placeholder="Contoh: 15000" min="0" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="product-stock" class="block text-sm font-medium text-gray-700 mb-1">Stok</label>
+                            <input type="number" id="product-stock" placeholder="Contoh: 50" min="0" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <div>
+                            <label for="product-category" class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                            <select id="product-category"
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                <option value="">Pilih Kategori</option>
+                                <!-- Categories will be loaded here -->
+                            </select>
+                        </div>
+                        <div class="col-span-1 sm:col-span-2 lg:col-span-3 flex justify-center mt-4">
+                            <button type="submit"
+                                class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                Tambah Produk
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4 text-center">Impor Produk dari Excel</h3>
+                        <div class="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
+                            <input type="file" id="excel-file-input" accept=".xls,.xlsx"
+                                class="block w-full sm:w-auto text-sm text-gray-500
+                                        file:mr-4 file:py-2 file:px-4
+                                        file:rounded-full file:border-0
+                                        file:text-sm file:font-semibold
+                                        file:bg-purple-50 file:text-purple-700
+                                        hover:file:bg-purple-100">
+                            <button id="import-excel-button"
+                                class="px-6 py-3 bg-purple-600 text-white font-semibold rounded-md shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                Impor Data
+                            </button>
+                        </div>
+                        <p class="text-center text-sm text-gray-500 mt-2">Pastikan file Excel Anda memiliki kolom: <strong>Nama</strong>, <strong>Gambar</strong>, <strong>Barcode</strong>, <strong>Harga Beli</strong>, <strong>Harga Jual</strong>, <strong>Stok</strong>.</p>
+                        <p class="text-center text-sm text-gray-500 mt-2">Kolom harga dan stok harus berisi angka saja.</p>
+                        <p class="text-center text-sm text-gray-500 mt-2 font-bold text-red-600">PENTING: Untuk Barcode yang diawali angka nol (misalnya 00123), format kolom Barcode di Excel sebagai 'Teks' sebelum menyimpan!</p>
+                    </div>
+
+                    <!-- Product Table List for Management View -->
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4 text-center">Daftar Produk</h3>
+                        <div class="flex items-center justify-between mb-4">
+                            <label for="products-per-page" class="text-sm font-medium text-gray-700">Produk per halaman:</label>
+                            <select id="products-per-page" class="ml-2 p-2 border border-gray-300 rounded-md text-sm">
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                            </select>
+                        </div>
+                        <div id="product-table-container" class="product-table-container">
+                            <!-- Product table will be rendered here -->
+                        </div>
+                        <div id="product-pagination-controls" class="flex justify-center items-center mt-4 space-x-2">
+                            <button id="product-prev-page" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed">Sebelumnya</button>
+                            <span id="product-page-info" class="text-sm font-medium text-gray-700"></span>
+                            <button id="product-next-page" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed">Berikutnya</button>
+                        </div>
+                        <div id="no-products-message-management" class="text-center text-gray-500 mt-8 hidden">Belum ada produk.</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Category Management Page Section -->
+            <section id="page-categories" class="page-content hidden">
+                <div class="p-6 bg-gray-50 rounded-lg shadow-inner">
+                    <h2 class="text-2xl font-semibold text-gray-700 mb-6 text-center">Manajemen Kategori</h2>
+                    <form id="category-form" class="flex flex-col sm:flex-row items-end gap-4 mb-8">
+                        <div class="flex-grow w-full sm:w-auto">
+                            <label for="category-name" class="block text-sm font-medium text-gray-700 mb-1">Nama Kategori</label>
+                            <input type="text" id="category-name" placeholder="Contoh: Minuman, Makanan Ringan" required
+                                class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        </div>
+                        <button type="submit"
+                            class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-md shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                            Tambah Kategori
+                        </button>
+                    </form>
+
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <h3 class="text-xl font-semibold text-gray-700 mb-4 text-center">Daftar Kategori</h3>
+                        <div class="flex items-center mb-4">
+                            <input type="text" id="category-search-input" placeholder="Cari Kategori berdasarkan nama"
+                                class="flex-grow px-4 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <button id="category-search-button"
+                                class="px-4 py-2 bg-gray-600 text-white rounded-r-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition ease-in-out duration-150">
+                                Cari
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between mb-4">
+                            <label for="categories-per-page" class="text-sm font-medium text-gray-700">Kategori per halaman:</label>
+                            <select id="categories-per-page" class="ml-2 p-2 border border-gray-300 rounded-md text-sm">
+                                <option value="5">5</option>
+                                <option value="10">10</option>
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                            </select>
+                        </div>
+                        <div id="category-table-container" class="category-table-container">
+                            <!-- Category table will be rendered here -->
+                        </div>
+                        <div id="category-pagination-controls" class="flex justify-center items-center mt-4 space-x-2">
+                            <button id="category-prev-page" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed">Sebelumnya</button>
+                            <span id="category-page-info" class="text-sm font-medium text-gray-700"></span>
+                            <button id="category-next-page" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400 disabled:opacity-50 disabled:cursor-not-allowed">Berikutnya</button>
+                        </div>
+                        <div id="no-categories-message" class="text-center text-gray-500 mt-8 hidden">Belum ada kategori.</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Modal for editing product (hidden by default) -->
+    <div id="edit-product-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Edit Produk</h3>
+            <form id="edit-product-form" class="space-y-4">
+                <input type="hidden" id="edit-product-id">
+                <div>
+                    <label for="edit-product-name" class="block text-sm font-medium text-gray-700 mb-1">Nama Produk</label>
+                    <input type="text" id="edit-product-name" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="edit-product-image-url" class="block text-sm font-medium text-gray-700 mb-1">URL Gambar</label>
+                    <input type="url" id="edit-product-image-url"
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                    <p class="text-xs text-gray-500 mt-1">Atau unggah gambar dari komputer Anda:</p>
+                    <input type="file" id="edit-product-image-file" accept="image/*"
+                           class="mt-2 block w-full text-sm text-gray-500
+                                  file:mr-4 file:py-2 file:px-4
+                                  file:rounded-full file:border-0
+                                  file:text-sm file:font-semibold
+                                  file:bg-indigo-50 file:text-indigo-700
+                                  hover:file:bg-indigo-100">
+                    <div id="edit-product-image-preview-container" class="mt-2 flex justify-center items-center h-24 w-24 border border-gray-300 rounded-md overflow-hidden bg-gray-100 hidden">
+                        <img id="edit-product-image-preview" src="" alt="Pratinjau Gambar" class="h-full w-full object-cover">
+                    </div>
+                </div>
+                <div>
+                    <label for="edit-product-barcode" class="block text-sm font-medium text-gray-700 mb-1">Barcode (Tidak Bisa Diedit)</label>
+                    <input type="text" id="edit-product-barcode" disabled
+                           class="mt-1 block w-full px-4 py-2 bg-gray-100 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="edit-product-purchase-price" class="block text-sm font-medium text-gray-700 mb-1">Harga Beli (Rp)</label>
+                    <input type="number" id="edit-product-purchase-price" min="0" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="edit-product-selling-price" class="block text-sm font-medium text-gray-700 mb-1">Harga Jual (Rp)</label>
+                    <input type="number" id="edit-product-selling-price" min="0" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="edit-product-stock" class="block text-sm font-medium text-gray-700 mb-1">Stok</label>
+                    <input type="number" id="edit-product-stock" min="0" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div>
+                    <label for="edit-product-category" class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                    <select id="edit-product-category"
+                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                        <option value="">Pilih Kategori</option>
+                        <!-- Categories will be loaded here -->
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" id="cancel-edit"
+                            class="px-5 py-2 bg-gray-300 text-gray-800 font-semibold rounded-md hover:bg-gray-400">
+                        Batal
+                    </button>
+                    <button type="submit"
+                            class="px-5 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-md hover:bg-blue-700">
+                        Simpan Perubahan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for editing category (new) -->
+    <div id="edit-category-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+            <h3 class="text-xl font-bold text-gray-800 mb-4">Edit Kategori</h3>
+            <form id="edit-category-form" class="space-y-4">
+                <input type="hidden" id="edit-category-id">
+                <div>
+                    <label for="edit-category-name" class="block text-sm font-medium text-gray-700 mb-1">Nama Kategori</label>
+                    <input type="text" id="edit-category-name" required
+                           class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm">
+                </div>
+                <div class="flex justify-end space-x-3 mt-6">
+                    <button type="button" id="cancel-category-edit"
+                            class="px-5 py-2 bg-gray-300 text-gray-800 font-semibold rounded-md hover:bg-gray-400">
+                        Batal
+                    </button>
+                    <button type="submit"
+                            class="px-5 py-2 bg-blue-600 text-white font-semibold rounded-md shadow-md hover:bg-blue-700">
+                        Simpan Perubahan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        const productsKey = 'pos_products';
+        const categoriesKey = 'pos_categories'; // New key for categories
+        let products = [];
+        let categories = []; // New array for categories
+        let cart = [];
+        let currentPage = 'pos'; // Default starting page
+
+        // Pagination for products
+        let currentProductPage = 1;
+        let productsPerPage = 10; // Default items per page for products
+
+        // Pagination for categories
+        let currentCategoryPage = 1;
+        let categoriesPerPage = 10; // Default items per page for categories
+
+        // Global variables to temporarily store Base64 image data for add/edit forms
+        let currentAddProductImageBase64 = '';
+        let currentEditProductImageBase64 = '';
+
+
+        // General UI elements
+        const messageBox = document.getElementById('message-box');
+
+        // Page sections
+        const pagePos = document.getElementById('page-pos');
+        const pageProducts = document.getElementById('page-products');
+        const pageCategories = document.getElementById('page-categories'); // New category page
+
+        // Sidebar navigation buttons
+        const navPosButton = document.getElementById('nav-pos');
+        const navProductsButton = document.getElementById('nav-products');
+        const navCategoriesButton = document.getElementById('nav-categories'); // New category nav button
+
+        // Product Management elements
+        const productForm = document.getElementById('product-form');
+        const productNameInput = document.getElementById('product-name');
+        const productImageURLInput = document.getElementById('product-image-url');
+        const productImageFileInput = document.getElementById('product-image-file');
+        const productImagePreview = document.getElementById('product-image-preview');
+        const productImagePreviewContainer = document.getElementById('product-image-preview-container');
+        const productBarcodeInput = document.getElementById('product-barcode');
+        const productPurchasePriceInput = document.getElementById('product-purchase-price');
+        const productSellingPriceInput = document.getElementById('product-selling-price');
+        const productStockInput = document.getElementById('product-stock');
+        const productCategorySelect = document.getElementById('product-category'); // New select for category
+        const excelFileInput = document.getElementById('excel-file-input');
+        const importExcelButton = document.getElementById('import-excel-button');
+
+        // POS interface elements (now specifically for grid view)
+        const productGridListDiv = document.getElementById('product-grid-list');
+        const noProductsMessagePos = document.getElementById('no-products-message-pos');
+        const barcodeScannerInput = document.getElementById('barcode-scanner-input');
+        const scanBarcodeButton = document.getElementById('scan-barcode-button');
+        const cartItemsDiv = document.getElementById('cart-items');
+        const emptyCartMessage = document.getElementById('empty-cart-message');
+        const cartTotalSpan = document.getElementById('cart-total');
+        const checkoutButton = document.getElementById('checkout-button');
+        const clearCartButton = document.getElementById('clear-cart-button');
+
+        // Edit Product Modal elements
+        const editProductModal = document.getElementById('edit-product-modal');
+        const editProductForm = document.getElementById('edit-product-form');
+        const editProductIdInput = document.getElementById('edit-product-id');
+        const editProductNameInput = document.getElementById('edit-product-name');
+        const editProductImageURLInput = document.getElementById('edit-product-image-url');
+        const editProductImageFileInput = document.getElementById('edit-product-image-file');
+        const editProductImagePreview = document.getElementById('edit-product-image-preview');
+        const editProductImagePreviewContainer = document.getElementById('edit-product-image-preview-container');
+        const editProductBarcodeInput = document.getElementById('edit-product-barcode');
+        const editProductPurchasePriceInput = document.getElementById('edit-product-purchase-price');
+        const editProductSellingPriceInput = document.getElementById('edit-product-selling-price');
+        const editProductStockInput = document.getElementById('edit-product-stock');
+        const editProductCategorySelect = document.getElementById('edit-product-category'); // New select for category
+        const cancelEditButton = document.getElementById('cancel-edit');
+
+        // New elements for Product Table List
+        const productTableContainer = document.getElementById('product-table-container');
+        const noProductsMessageManagement = document.getElementById('no-products-message-management');
+        const productsPerPageSelect = document.getElementById('products-per-page'); // New select for products per page
+        const productPrevPageButton = document.getElementById('product-prev-page'); // New button for product pagination
+        const productNextPageButton = document.getElementById('product-next-page'); // New button for product pagination
+        const productPageInfoSpan = document.getElementById('product-page-info'); // New span for product page info
+        const productPaginationControls = document.getElementById('product-pagination-controls');
+
+
+        // New elements for Category Management
+        const categoryForm = document.getElementById('category-form');
+        const categoryNameInput = document.getElementById('category-name');
+        const categorySearchInput = document.getElementById('category-search-input');
+        const categorySearchButton = document.getElementById('category-search-button');
+        const categoryTableContainer = document.getElementById('category-table-container');
+        const noCategoriesMessage = document.getElementById('no-categories-message');
+        const editCategoryModal = document.getElementById('edit-category-modal');
+        const editCategoryForm = document.getElementById('edit-category-form');
+        const editCategoryIdInput = document.getElementById('edit-category-id');
+        const editCategoryNameInput = document.getElementById('edit-category-name');
+        const cancelCategoryEditButton = document.getElementById('cancel-category-edit');
+        const categoriesPerPageSelect = document.getElementById('categories-per-page'); // New select for categories per page
+        const categoryPrevPageButton = document.getElementById('category-prev-page'); // New button for category pagination
+        const categoryNextPageButton = document.getElementById('category-next-page'); // New button for category pagination
+        const categoryPageInfoSpan = document.getElementById('category-page-info'); // New span for category page info
+        const categoryPaginationControls = document.getElementById('category-pagination-controls');
+
+
+        // --- Utility Functions ---
+
+        /**
+         * Generates a unique ID (simple UUID-like for demo purposes).
+         * @returns {string} A unique ID string.
+         */
+        function generateUniqueId() {
+            return '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        /**
+         * Formats a number as Indonesian Rupiah.
+         * @param {number} amount - The amount to format.
+         * @returns {string} Formatted string, e.g., "Rp 15.000".
+         */
+        function formatRupiah(amount) {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(amount);
+        }
+
+        /**
+         * Displays a message in the message box.
+         * @param {string} message - The message to display.
+         * @param {string} type - 'success', 'error', or 'info' for styling.
+         */
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800', 'bg-blue-100', 'text-blue-800');
+            if (type === 'success') {
+                messageBox.classList.add('bg-green-100', 'text-green-800');
+            } else if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-800');
+            } else {
+                messageBox.classList.add('bg-blue-100', 'text-blue-800');
+            }
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 3000); // Hide after 3 seconds
+        }
+
+        // --- Page Navigation ---
+
+        /**
+         * Shows the specified page and hides others.
+         * Updates active state in sidebar.
+         * @param {string} pageName - The ID of the page to show (e.g., 'pos', 'products', 'categories').
+         */
+        function showPage(pageName) {
+            currentPage = pageName;
+
+            // Hide all pages
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.add('hidden');
+            });
+
+            // Remove active class from all nav buttons
+            document.querySelectorAll('.nav-button').forEach(button => {
+                button.classList.remove('active-nav-button');
+                button.classList.remove('bg-blue-600', 'text-white'); // Remove blue highlight
+                button.classList.add('text-gray-200'); // Add default text color
+            });
+
+
+            // Show the requested page
+            switch (pageName) {
+                case 'pos':
+                    pagePos.classList.remove('hidden');
+                    navPosButton.classList.add('active-nav-button', 'bg-blue-600', 'text-white');
+                    navPosButton.classList.remove('text-gray-200');
+                    renderProductsGrid(); // Ensure products are rendered in grid when entering POS view
+                    renderCart(); // Ensure cart is rendered when entering POS view
+                    break;
+                case 'products':
+                    pageProducts.classList.remove('hidden');
+                    navProductsButton.classList.add('active-nav-button', 'bg-blue-600', 'text-white');
+                    navProductsButton.classList.remove('text-gray-200');
+                    renderProductsTable(); // Ensure products are rendered in table when entering management view
+                    populateCategoryDropdowns(); // Populate category dropdowns on product management page
+                    break;
+                case 'categories':
+                    pageCategories.classList.remove('hidden');
+                    navCategoriesButton.classList.add('active-nav-button', 'bg-blue-600', 'text-white');
+                    navCategoriesButton.classList.remove('text-gray-200');
+                    renderCategoriesTable(); // Render categories when entering category management view
+                    break;
+                default:
+                    pagePos.classList.remove('hidden');
+                    navPosButton.classList.add('active-nav-button', 'bg-blue-600', 'text-white');
+                    navPosButton.classList.remove('text-gray-200');
+                    renderProductsGrid();
+                    renderCart();
+                    break;
+            }
+        }
+
+        // Event listeners for sidebar navigation
+        navPosButton.addEventListener('click', () => showPage('pos'));
+        navProductsButton.addEventListener('click', () => showPage('products'));
+        navCategoriesButton.addEventListener('click', () => showPage('categories')); // New event listener
+
+
+        // --- Product Management (Local Storage) ---
+
+        /**
+         * Loads products from local storage.
+         */
+        function loadProducts() {
+            const storedProducts = localStorage.getItem(productsKey);
+            products = storedProducts ? JSON.parse(storedProducts) : [];
+        }
+
+        /**
+         * Saves products to local storage.
+         */
+        function saveProducts() {
+            localStorage.setItem(productsKey, JSON.stringify(products));
+        }
+
+        /**
+         * Renders all products to the product list display (Grid for POS).
+         */
+        function renderProductsGrid() {
+            productGridListDiv.innerHTML = ''; // Clear existing products
+            if (products.length === 0) {
+                noProductsMessagePos.classList.remove('hidden');
+            } else {
+                noProductsMessagePos.classList.add('hidden');
+                products.forEach(product => {
+                    // Get category name for display
+                    const categoryName = product.category ? (categories.find(cat => cat.id === product.category)?.name || 'Tidak Dikategorikan') : 'Tidak Dikategorikan';
+
+                    const productCard = document.createElement('div');
+                    productCard.className = 'bg-white rounded-lg shadow-md p-4 flex flex-col justify-between items-center text-center transform hover:scale-105 transition-transform duration-200';
+                    productCard.innerHTML = `
+                        <img src="${product.image || 'https://placehold.co/150x150/e0e0e0/ffffff?text=No+Image'}"
+                             alt="${product.name}" class="w-24 h-24 object-cover rounded-full mb-3 border-2 border-gray-200"
+                             onerror="this.onerror=null;this.src='https://placehold.co/150x150/e0e0e0/ffffff?text=No+Image';">
+                        <h3 class="text-md font-semibold text-gray-800 mb-1">${product.name}</h3>
+                        <p class="text-sm text-gray-600 mb-1">Kategori: ${categoryName}</p>
+                        <p class="text-sm text-gray-600 mb-1">Stok: <span id="stock-${product.id}">${product.stock}</span></p>
+                        <p class="text-lg font-bold text-green-600 mb-3">${formatRupiah(product.sellingPrice)}</p>
+                        <p class="text-xs text-gray-400 mb-3">Barcode: ${product.barcode}</p>
+                        <div class="flex justify-center mt-auto">
+                            <button class="add-to-cart-button icon-button px-4 py-2 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-product-id="${product.id}"
+                                    ${product.stock === 0 ? 'disabled' : ''}>
+                                <i class="fas fa-cart-plus"></i>
+                            </button>
+                        </div>
+                    `;
+                    productGridListDiv.appendChild(productCard);
+                });
+                attachProductGridEventListeners(); // New function for grid
+            }
+        }
+
+        /**
+         * Attaches event listeners to add-to-cart buttons for the grid view.
+         * Edit and Delete buttons are removed from POS grid view.
+         */
+        function attachProductGridEventListeners() {
+            document.querySelectorAll('.add-to-cart-button').forEach(button => {
+                // Use currentTarget to ensure the dataset from the button is retrieved
+                button.onclick = (e) => addToCart(e.currentTarget.dataset.productId);
+            });
+        }
+
+
+        /**
+         * Renders products to the product table display with pagination (for Management page).
+         */
+        function renderProductsTable() {
+            productTableContainer.innerHTML = ''; // Clear existing table
+
+            const startIndex = (currentProductPage - 1) * productsPerPage;
+            const endIndex = startIndex + productsPerPage;
+            const paginatedProducts = products.slice(startIndex, endIndex);
+
+            console.log('Rendering products table. Total products:', products.length, 'Paginated products:', paginatedProducts);
+
+
+            if (products.length === 0) {
+                noProductsMessageManagement.classList.remove('hidden');
+                productPaginationControls.classList.add('hidden'); // Hide pagination controls if no products
+            } else {
+                noProductsMessageManagement.classList.add('hidden');
+                productPaginationControls.classList.remove('hidden'); // Show pagination controls
+
+                const table = document.createElement('table');
+                table.className = 'product-table min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden shadow';
+                table.innerHTML = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Gambar</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Harga Beli</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Harga Jual</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Stok</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                    </tbody>
+                `;
+
+                const tbody = table.querySelector('tbody');
+                paginatedProducts.forEach(product => {
+                    // Get category name for display
+                    const categoryName = product.category ? (categories.find(cat => cat.id === product.category)?.name || 'Tidak Dikategorikan') : 'Tidak Dikategorikan';
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <img src="${product.image || 'https://placehold.co/40x40/e0e0e0/ffffff?text=No'}"
+                                 alt="${product.name}"
+                                 onerror="this.onerror=null;this.src='https://placehold.co/40x40/e0e0e0/ffffff?text=No';">
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${categoryName}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.barcode}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formatRupiah(product.purchasePrice)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.sellingPrice ? formatRupiah(product.sellingPrice) : 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${product.stock}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-center space-x-2">
+                            <button class="edit-product-button icon-button px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600"
+                                    data-product-id="${product.id}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-product-button icon-button px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600"
+                                    data-product-id="${product.id}">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                productTableContainer.appendChild(table);
+                attachProductTableEventListeners(); // New function for table
+            }
+            updateProductPaginationControls();
+        }
+
+        /**
+         * Updates the state of product pagination buttons and info.
+         */
+        function updateProductPaginationControls() {
+            const totalPages = Math.ceil(products.length / productsPerPage);
+            productPageInfoSpan.textContent = `Halaman ${currentProductPage} dari ${totalPages}`;
+
+            productPrevPageButton.disabled = currentProductPage === 1;
+            productNextPageButton.disabled = currentProductPage === totalPages;
+
+            if (products.length === 0) {
+                productPaginationControls.classList.add('hidden');
+            } else {
+                productPaginationControls.classList.remove('hidden');
+            }
+        }
+
+        // Event listeners for product pagination controls
+        productsPerPageSelect.addEventListener('change', (e) => {
+            productsPerPage = parseInt(e.target.value, 10);
+            currentProductPage = 1; // Reset to first page
+            renderProductsTable();
+        });
+
+        productPrevPageButton.addEventListener('click', () => {
+            if (currentProductPage > 1) {
+                currentProductPage--;
+                renderProductsTable();
+            }
+        });
+
+        productNextPageButton.addEventListener('click', () => {
+            const totalPages = Math.ceil(products.length / productsPerPage);
+            if (currentProductPage < totalPages) {
+                currentProductPage++;
+                renderProductsTable();
+            }
+        });
+
+
+        /**
+         * Attaches event listeners to edit and delete buttons for the table view.
+         */
+        function attachProductTableEventListeners() {
+            document.querySelectorAll('.edit-product-button').forEach(button => {
+                // Use currentTarget to ensure the dataset from the button is retrieved
+                button.onclick = (e) => openEditModal(e.currentTarget.dataset.productId);
+            });
+            document.querySelectorAll('.delete-product-button').forEach(button => {
+                // Use currentTarget to ensure the dataset from the button is retrieved
+                button.onclick = (e) => deleteProduct(e.currentTarget.dataset.productId);
+            });
+        }
+
+
+        // Event listener for product-image-file input (Add Product Form)
+        productImageFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    currentAddProductImageBase64 = event.target.result;
+                    productImagePreview.src = currentAddProductImageBase64;
+                    productImagePreviewContainer.classList.remove('hidden');
+                    productImageURLInput.value = ''; // Clear URL input if file is selected
+                };
+                reader.readAsDataURL(file);
+            } else {
+                currentAddProductImageBase64 = '';
+                productImagePreview.src = '';
+                productImagePreviewContainer.classList.add('hidden');
+            }
+        });
+
+        // Event listener for product-image-url input (Add Product Form)
+        productImageURLInput.addEventListener('input', () => {
+            productImageFileInput.value = ''; // Clear selected file
+            currentAddProductImageBase64 = '';
+            productImagePreview.src = '';
+            productImagePreviewContainer.classList.add('hidden');
+        });
+
+        /**
+         * Populates the category dropdowns in product forms.
+         */
+        function populateCategoryDropdowns() {
+            // Populate Add Product form category dropdown
+            productCategorySelect.innerHTML = '<option value="">Pilih Kategori</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.name;
+                productCategorySelect.appendChild(option);
+            });
+
+            // Populate Edit Product form category dropdown
+            editProductCategorySelect.innerHTML = '<option value="">Pilih Kategori</option>';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.id;
+                option.textContent = cat.name;
+                editProductCategorySelect.appendChild(option);
+            });
+        }
+
+
+        /**
+         * Handles adding a new product.
+         * @param {Event} e - The form submission event.
+         */
+        productForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const name = productNameInput.value.trim();
+            const barcode = productBarcodeInput.value.trim();
+            const purchasePrice = parseFloat(productPurchasePriceInput.value);
+            const sellingPrice = parseFloat(productSellingPriceInput.value);
+            const stock = parseInt(productStockInput.value, 10);
+            const category = productCategorySelect.value; // Get selected category ID
+
+            let image = '';
+            if (currentAddProductImageBase64) {
+                image = currentAddProductImageBase64;
+            } else {
+                image = productImageURLInput.value.trim() || 'https://placehold.co/150x150/e0e0e0/ffffff?text=No+Image';
+            }
+
+            if (!name || !barcode || isNaN(purchasePrice) || isNaN(sellingPrice) || isNaN(stock)) {
+                showMessage('Harap lengkapi semua field yang diperlukan.', 'error');
+                return;
+            }
+
+            if (purchasePrice < 0 || sellingPrice < 0 || stock < 0) {
+                 showMessage('Harga dan stok tidak boleh negatif.', 'error');
+                return;
+            }
+
+            // Check for duplicate barcode
+            const existingProduct = products.find(p => p.barcode === barcode);
+            if (existingProduct) {
+                showMessage(`Barcode "${barcode}" sudah ada. Gunakan barcode unik.`, 'error'); // More specific message
+                return;
+            }
+
+            const newProduct = {
+                id: generateUniqueId(),
+                name,
+                image,
+                barcode,
+                purchasePrice,
+                sellingPrice,
+                stock,
+                category // Add category to product object
+            };
+
+            products.push(newProduct);
+            saveProducts();
+            renderProductsGrid(); // Update POS grid
+            renderProductsTable(); // Update management table
+            productForm.reset();
+            // Reset image inputs after successful add
+            productImageURLInput.value = '';
+            productImageFileInput.value = '';
+            currentAddProductImageBase64 = '';
+            productImagePreview.src = '';
+            productImagePreviewContainer.classList.add('hidden');
+            productCategorySelect.value = ''; // Reset category select
+            showMessage('Produk berhasil ditambahkan!', 'success');
+        });
+
+        /**
+         * Deletes a product by ID.
+         * @param {string} productId - The ID of the product to delete.
+         */
+        function deleteProduct(productId) {
+            if (confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
+                products = products.filter(p => p.id !== productId);
+                saveProducts();
+                renderProductsGrid(); // Update POS grid
+                renderProductsTable(); // Update management table
+                // Also remove from cart if present
+                cart = cart.filter(item => item.id !== productId);
+                renderCart();
+                showMessage('Produk berhasil dihapus!', 'success');
+            }
+        }
+
+        // --- Edit Product Modal ---
+
+        // Event listener for edit-product-image-file input (Edit Product Form)
+        editProductImageFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    currentEditProductImageBase64 = event.target.result;
+                    editProductImagePreview.src = currentEditProductImageBase64;
+                    editProductImagePreviewContainer.classList.remove('hidden');
+                    editProductImageURLInput.value = ''; // Clear URL input if file is selected
+                };
+                reader.readAsDataURL(file);
+            } else {
+                currentEditProductImageBase64 = '';
+                editProductImagePreview.src = '';
+                editProductImagePreviewContainer.classList.add('hidden');
+            }
+        });
+
+        // Event listener for edit-product-image-url input (Edit Product Form)
+        editProductImageURLInput.addEventListener('input', () => {
+            editProductImageFileInput.value = ''; // Clear selected file
+            currentEditProductImageBase64 = '';
+            editProductImagePreview.src = '';
+            editProductImagePreviewContainer.classList.add('hidden');
+        });
+
+
+        /**
+         * Opens the edit product modal and populates it with product data.
+         * @param {string} productId - The ID of the product to edit.
+         */
+        function openEditModal(productId) {
+            const productToEdit = products.find(p => p.id === productId);
+            if (!productToEdit) {
+                showMessage('Produk tidak ditemukan untuk diedit.', 'error');
+                return;
+            }
+
+            editProductIdInput.value = productToEdit.id;
+            editProductNameInput.value = productToEdit.name;
+            editProductBarcodeInput.value = productToEdit.barcode; // Barcode is disabled for editing
+            editProductPurchasePriceInput.value = productToEdit.purchasePrice;
+            editProductSellingPriceInput.value = productToEdit.sellingPrice;
+            editProductStockInput.value = productToEdit.stock;
+            editProductCategorySelect.value = productToEdit.category || ''; // Set selected category
+
+            // Handle image display in edit modal
+            if (productToEdit.image && productToEdit.image.startsWith('data:image')) {
+                editProductImagePreview.src = productToEdit.image;
+                editProductImagePreviewContainer.classList.remove('hidden');
+                editProductImageURLInput.value = ''; // Clear URL input
+                editProductImageFileInput.value = ''; // Ensure file input is clear
+                currentEditProductImageBase64 = productToEdit.image; // Set Base64 for current editing session
+            } else {
+                editProductImageURLInput.value = productToEdit.image;
+                editProductImagePreview.src = '';
+                editProductImagePreviewContainer.classList.add('hidden');
+                editProductImageFileInput.value = ''; // Ensure file input is clear
+                currentEditProductImageBase64 = ''; // Clear Base64 state
+            }
+
+            editProductModal.classList.remove('hidden');
+        }
+
+        /**
+         * Closes the edit product modal.
+         */
+        cancelEditButton.addEventListener('click', () => {
+            editProductModal.classList.add('hidden');
+            // Clear temporary Base64 state and image previews on modal close
+            currentEditProductImageBase64 = '';
+            editProductImagePreview.src = '';
+            editProductImagePreviewContainer.classList.add('hidden');
+            editProductImageURLInput.value = '';
+            editProductImageFileInput.value = '';
+        });
+
+        /**
+         * Handles the submission of the edit product form.
+         * @param {Event} e - The form submission event.
+         */
+        editProductForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const id = editProductIdInput.value;
+            const name = editProductNameInput.value.trim();
+            const purchasePrice = parseFloat(editProductPurchasePriceInput.value);
+            const sellingPrice = parseFloat(editProductSellingPriceInput.value);
+            const stock = parseInt(editProductStockInput.value, 10);
+            const category = editProductCategorySelect.value; // Get selected category ID
+
+            let image = '';
+            // Prioritize local file upload if selected
+            if (currentEditProductImageBase64) {
+                image = currentEditProductImageBase64;
+            } else {
+                image = editProductImageURLInput.value.trim() || 'https://placehold.co/150x150/e0e0e0/ffffff?text=No+Image';
+            }
+
+            if (!name || isNaN(purchasePrice) || isNaN(sellingPrice) || isNaN(stock)) {
+                showMessage('Harap lengkapi semua field yang diperlukan.', 'error');
+                return;
+            }
+
+            if (purchasePrice < 0 || sellingPrice < 0 || stock < 0) {
+                 showMessage('Harga dan stok tidak boleh negatif.', 'error');
+                return;
+            }
+
+            const productIndex = products.findIndex(p => p.id === id);
+            if (productIndex > -1) {
+                products[productIndex] = {
+                    ...products[productIndex], // Keep barcode as it's not editable
+                    name,
+                    image, // Use the determined image source (URL or Base64)
+                    purchasePrice,
+                    sellingPrice,
+                    stock,
+                    category // Update category
+                };
+                saveProducts();
+                renderProductsGrid(); // Update POS grid
+                renderProductsTable(); // Update management table
+                renderCart(); // Re-render cart in case prices changed
+                editProductModal.classList.add('hidden');
+                // Clear temporary Base64 state and image previews after update
+                currentEditProductImageBase64 = '';
+                editProductImagePreview.src = '';
+                editProductImagePreviewContainer.classList.add('hidden');
+                editProductImageURLInput.value = '';
+                editProductImageFileInput.value = '';
+                showMessage('Produk berhasil diperbarui!', 'success');
+            } else {
+                showMessage('Produk tidak ditemukan.', 'error');
+            }
+        });
+
+
+        // --- Cart Functionality ---
+
+        /**
+         * Adds a product to the cart.
+         * @param {string} productId - The ID of the product to add.
+         */
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            if (product.stock <= 0) {
+                showMessage(`Stok ${product.name} habis!`, 'error');
+                return;
+            }
+
+            const cartItem = cart.find(item => item.id === productId);
+            if (cartItem) {
+                cartItem.quantity++;
+            } else {
+                cart.push({
+                    id: product.id,
+                    name: product.name,
+                    sellingPrice: product.sellingPrice,
+                    quantity: 1
+                });
+            }
+
+            // Decrease product stock
+            product.stock--;
+            saveProducts(); // Save updated product stock
+            renderProductsGrid(); // Update product card display
+            renderProductsTable(); // Update product table display
+
+            renderCart();
+            showMessage(`${product.name} ditambahkan ke keranjang.`, 'success');
+        }
+
+        /**
+         * Renders the cart items and updates the total.
+         */
+        function renderCart() {
+            cartItemsDiv.innerHTML = ''; // Clear existing cart items
+            let total = 0;
+
+            if (cart.length === 0) {
+                emptyCartMessage.classList.remove('hidden');
+                checkoutButton.disabled = true;
+                clearCartButton.disabled = true;
+            } else {
+                emptyCartMessage.classList.add('hidden');
+                checkoutButton.disabled = false;
+                clearCartButton.disabled = false;
+                cart.forEach(item => {
+                    const productInStock = products.find(p => p.id === item.id);
+                    const currentStock = productInStock ? productInStock.stock : 0;
+
+                    const cartItemDiv = document.createElement('div');
+                    cartItemDiv.className = 'flex items-center justify-between bg-white rounded-md p-3 shadow-sm';
+                    cartItemDiv.innerHTML = `
+                        <div class="flex-grow">
+                            <p class="font-semibold text-gray-800">${item.name}</p>
+                            <p class="text-sm text-gray-600">${formatRupiah(item.sellingPrice)} x ${item.quantity}</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button class="quantity-minus px-2 py-1 bg-gray-200 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-product-id="${item.id}"
+                                    ${item.quantity === 1 ? 'disabled' : ''}>-</button>
+                            <span class="font-medium text-gray-700">${item.quantity}</span>
+                            <button class="quantity-plus px-2 py-1 bg-gray-200 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-product-id="${item.id}"
+                                    ${currentStock === 0 ? 'disabled' : ''}>+</button>
+                            <button class="remove-from-cart px-2 py-1 bg-red-500 text-white rounded-md hover:bg-red-600"
+                                    data-product-id="${item.id}">X</button>
+                        </div>
+                    `;
+                    cartItemsDiv.appendChild(cartItemDiv);
+                    total += item.sellingPrice * item.quantity;
+                });
+                attachCartEventListeners();
+            }
+            cartTotalSpan.textContent = formatRupiah(total);
+        }
+
+        /**
+         * Attaches event listeners for cart item quantity change and removal.
+         */
+        function attachCartEventListeners() {
+            document.querySelectorAll('.quantity-minus').forEach(button => {
+                button.onclick = (e) => updateCartQuantity(e.target.dataset.productId, -1);
+            });
+            document.querySelectorAll('.quantity-plus').forEach(button => {
+                button.onclick = (e) => updateCartQuantity(e.target.dataset.productId, 1);
+            });
+            document.querySelectorAll('.remove-from-cart').forEach(button => {
+                button.onclick = (e) => removeFromCart(e.target.dataset.productId);
+            });
+        }
+
+        /**
+         * Updates the quantity of an item in the cart.
+         * @param {string} productId - The ID of the product.
+         * @param {number} change - The amount to change the quantity by (e.g., 1 or -1).
+         */
+        function updateCartQuantity(productId, change) {
+            const cartItem = cart.find(item => item.id === productId);
+            const product = products.find(p => p.id === productId);
+
+            if (!cartItem || !product) return;
+
+            if (change > 0) { // Increment quantity
+                if (product.stock > 0) {
+                    cartItem.quantity++;
+                    product.stock--; // Decrease stock
+                    saveProducts();
+                    renderProductsGrid(); // Re-render product list to update stock
+                    renderProductsTable(); // Re-render product table to update stock
+                } else {
+                    showMessage(`Stok ${product.name} habis!`, 'error');
+                }
+            } else { // Decrement quantity
+                if (cartItem.quantity > 1) {
+                    cartItem.quantity--;
+                    product.stock++; // Increase stock back
+                    saveProducts();
+                    renderProductsGrid(); // Re-render product list to update stock
+                    renderProductsTable(); // Re-render product table to update stock
+                } else {
+                    // If quantity becomes 0, remove from cart
+                    removeFromCart(productId);
+                    return;
+                }
+            }
+            renderCart();
+        }
+
+        /**
+         * Removes an item from the cart.
+         * @param {string} productId - The ID of the product to remove.
+         */
+        function removeFromCart(productId) {
+            const itemToRemove = cart.find(item => item.id === productId);
+            if (itemToRemove) {
+                const product = products.find(p => p.id === productId);
+                if (product) {
+                    product.stock += itemToRemove.quantity; // Return stock to product
+                    saveProducts();
+                    renderProductsGrid(); // Update product card display
+                    renderProductsTable(); // Update product table display
+                }
+            }
+            cart = cart.filter(item => item.id !== productId);
+            renderCart();
+            showMessage('Produk dihapus dari keranjang.', 'info');
+        }
+
+        /**
+         * Handles the checkout process.
+         */
+        checkoutButton.addEventListener('click', () => {
+            if (cart.length === 0) {
+                showMessage('Keranjang belanja kosong!', 'error');
+                return;
+            }
+            const totalAmount = parseFloat(cartTotalSpan.textContent.replace(/[Rp.,]/g, '').replace(' ', '')); // Fix for 'Rp 15.000' format
+            const message = `Transaksi berhasil!\nTotal: ${formatRupiah(totalAmount)}\n\nTerima kasih!`;
+            alert(message);
+            cart = []; // Clear cart after checkout
+            renderCart();
+            showMessage('Transaksi selesai.', 'success');
+        });
+
+        /**
+         * Clears all items from the cart.
+         */
+        clearCartButton.addEventListener('click', () => {
+            if (confirm('Apakah Anda yakin ingin mengosongkan keranjang?')) {
+                // Return stock to products before clearing cart
+                cart.forEach(item => {
+                    const product = products.find(p => p.id === item.id);
+                    if (product) {
+                        product.stock += item.quantity;
+                    }
+                });
+                saveProducts(); // Save updated product stock
+                renderProductsGrid(); // Update product card display
+                renderProductsTable(); // Update product table display
+
+                cart = [];
+                renderCart();
+                showMessage('Keranjang berhasil dikosongkan.', 'info');
+            }
+        });
+
+        // --- Barcode Scanner Simulation ---
+
+        /**
+         * Handles barcode input (simulates scanning).
+         */
+        barcodeScannerInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Prevent form submission if input is inside a form
+                findProductByBarcode();
+            }
+        });
+
+        /**
+         * Handles barcode search button click.
+         */
+        scanBarcodeButton.addEventListener('click', findProductByBarcode);
+
+        /**
+         * Finds a product by barcode and adds it to cart if found.
+         */
+        function findProductByBarcode() {
+            const barcode = barcodeScannerInput.value.trim();
+            if (!barcode) {
+                showMessage('Masukkan barcode untuk mencari produk.', 'info');
+                return;
+            }
+
+            const product = products.find(p => p.barcode === barcode);
+            if (product) {
+                addToCart(product.id);
+                barcodeScannerInput.value = ''; // Clear input after finding
+            } else {
+                showMessage(`Produk dengan barcode "${barcode}" tidak ditemukan.`, 'error');
+            }
+        }
+
+        // --- Excel Import Functionality ---
+
+        /**
+         * Handles the Excel file upload and parsing.
+         * @param {Event} event - The file input change event.
+         */
+        importExcelButton.addEventListener('click', () => {
+            const file = excelFileInput.files[0];
+            if (!file) {
+                showMessage('Pilih file Excel terlebih dahulu.', 'error');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0]; // Get the first sheet
+                    const worksheet = workbook.Sheets[sheetName];
+                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // Read as array of arrays to handle raw cell values better
+                    console.log('Data mentah dari Excel (array of arrays):', json); // Log the raw array
+
+                    // Determine headers from the first row and map to expected keys
+                    if (json.length === 0) {
+                        showMessage('File Excel kosong atau tidak ada data.', 'error');
+                        return;
+                    }
+
+                    const headers = json[0].map(h => String(h).trim());
+                    const dataRows = json.slice(1); // Skip header row
+
+                    // Map headers to expected internal keys
+                    const headerMap = {
+                        'Nama': 'Nama',
+                        'Gambar': 'Gambar',
+                        'Barcode': 'Barcode',
+                        'Harga Beli': 'Harga Beli',
+                        'Harga Jual': 'Harga Jual',
+                        'Stok': 'Stok',
+                        'Kategori': 'Kategori' // Add category for Excel import
+                    };
+
+                    const processedData = dataRows.map((row, rowIndex) => {
+                        let obj = {};
+                        headers.forEach((header, i) => {
+                            const mappedHeader = headerMap[header];
+                            if (mappedHeader) {
+                                let cellValue = row[i];
+                                // Explicitly convert barcode to string
+                                if (header === 'Barcode') {
+                                    obj[mappedHeader] = cellValue !== undefined && cellValue !== null ? String(cellValue) : '';
+                                } else {
+                                    obj[mappedHeader] = cellValue;
+                                }
+                            }
+                        });
+                        console.log(`Processed row ${rowIndex + 1}:`, obj); // Log each processed row
+                        return obj;
+                    });
+                    console.log('Data yang diproses dari Excel (JSON Array):', processedData); // Log the parsed JSON array
+
+                    processExcelData(processedData);
+                    showMessage(`Berhasil mengimpor ${processedData.length} produk dari Excel!`, 'success');
+                    excelFileInput.value = ''; // Clear file input
+                } catch (error) {
+                    console.error("Error reading Excel file:", error);
+                    showMessage('Gagal membaca file Excel. Pastikan formatnya benar dan tidak rusak.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        /**
+         * Processes the JSON data from the Excel file and updates products.
+         * @param {Array<Object>} excelData - Array of product objects from Excel.
+         */
+        function processExcelData(excelData) {
+            let productsAdded = 0;
+            let productsUpdated = 0;
+            let productsSkipped = 0;
+
+            console.log('Memulai proses data Excel. Produk sebelum impor:', [...products]); // Log a copy to see initial state
+
+            excelData.forEach((item, index) => {
+                // Ensure barcode is always treated as a string to preserve leading zeros.
+                const name = String(item['Nama'] || '').trim();
+                const image = String(item['Gambar'] || '').trim() || 'https://placehold.co/150x150/e0e0e0/ffffff?text=No+Image';
+                const barcode = String(item['Barcode'] || '').trim(); // Ensure string conversion here
+                const purchasePrice = parseFloat(item['Harga Beli']);
+                const sellingPrice = parseFloat(item['Harga Jual']);
+                const stock = parseInt(item['Stok'], 10);
+                const categoryNameFromExcel = String(item['Kategori'] || '').trim();
+
+                let categoryId = '';
+                if (categoryNameFromExcel) {
+                    // Find existing category or create a new one
+                    let existingCategory = categories.find(cat => cat.name.toLowerCase() === categoryNameFromExcel.toLowerCase());
+                    if (!existingCategory) {
+                        const newCat = { id: generateUniqueId(), name: categoryNameFromExcel };
+                        categories.push(newCat);
+                        saveCategories(); // Save new category
+                        existingCategory = newCat;
+                    }
+                    categoryId = existingCategory.id;
+                }
+
+
+                let skipReason = [];
+                if (!name) skipReason.push('Nama kosong');
+                // Barcode can be "0" but not an empty string
+                if (barcode === '') skipReason.push('Barcode kosong');
+                if (isNaN(purchasePrice)) skipReason.push('Harga Beli bukan angka');
+                if (isNaN(sellingPrice)) skipReason.push('Harga Jual bukan angka');
+                if (isNaN(stock)) skipReason.push('Stok bukan angka');
+                if (purchasePrice < 0) skipReason.push('Harga Beli negatif');
+                if (sellingPrice < 0) skipReason.push('Harga Jual negatif');
+                if (stock < 0) skipReason.push('Stok negatif');
+
+                // If any validation fails, skip this row and log the reason
+                if (skipReason.length > 0) {
+                    console.warn(`Melewatkan baris Excel ${index + 2} karena: ${skipReason.join(', ')}. Data:`, item);
+                    productsSkipped++;
+                    return;
+                }
+
+                // Find if the product with this barcode already exists in our current 'products' list
+                const productIndex = products.findIndex(p => p.barcode === barcode);
+
+                if (productIndex > -1) {
+                    // Update existing product
+                    products[productIndex] = {
+                        ...products[productIndex], // Keep existing ID
+                        name,
+                        image,
+                        purchasePrice,
+                        sellingPrice,
+                        stock,
+                        category: categoryId // Update category from Excel
+                    };
+                    productsUpdated++;
+                    console.log(`Produk diperbarui (Barcode: ${barcode}):`, products[productIndex]);
+                } else {
+                    // Add new product
+                    const newProduct = {
+                        id: generateUniqueId(), // Generate a new unique ID
+                        name,
+                        image,
+                        barcode,
+                        purchasePrice,
+                        sellingPrice,
+                        stock,
+                        category: categoryId // Add category from Excel
+                    };
+                    products.push(newProduct);
+                    productsAdded++;
+                    console.log(`Produk baru ditambahkan (Barcode: ${barcode}):`, newProduct);
+                }
+                console.log('State produk setelah memproses item ini:', [...products]); // Log state after each item
+            });
+
+            console.log('Selesai proses data Excel. Produk setelah impor:', [...products]); // Final state
+            // After processing all Excel data, save and re-render
+            saveProducts();
+            renderProductsGrid();
+            renderProductsTable();
+            populateCategoryDropdowns(); // Re-populate dropdowns after potential new categories from Excel
+            showMessage(`Impor selesai: ${productsAdded} produk baru, ${productsUpdated} diperbarui, ${productsSkipped} dilewati.`, 'success');
+        }
+
+
+        // --- Category Management Functions (New) ---
+
+        /**
+         * Loads categories from local storage.
+         */
+        function loadCategories() {
+            const storedCategories = localStorage.getItem(categoriesKey);
+            categories = storedCategories ? JSON.parse(storedCategories) : [];
+        }
+
+        /**
+         * Saves categories to local storage.
+         */
+        function saveCategories() {
+            localStorage.setItem(categoriesKey, JSON.stringify(categories));
+        }
+
+        /**
+         * Renders the category table based on search term and pagination.
+         * @param {string} searchTerm - The term to filter categories by name.
+         */
+        function renderCategoriesTable(searchTerm = '') {
+            categoryTableContainer.innerHTML = ''; // Clear existing table
+            const filteredCategories = categories.filter(cat =>
+                cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            const startIndex = (currentCategoryPage - 1) * categoriesPerPage;
+            const endIndex = startIndex + categoriesPerPage;
+            const paginatedCategories = filteredCategories.slice(startIndex, endIndex);
+
+            if (filteredCategories.length === 0) {
+                noCategoriesMessage.classList.remove('hidden');
+                categoryPaginationControls.classList.add('hidden'); // Hide pagination controls if no categories
+            } else {
+                noCategoriesMessage.classList.add('hidden');
+                categoryPaginationControls.classList.remove('hidden'); // Show pagination controls
+
+
+                const table = document.createElement('table');
+                table.className = 'category-table min-w-full divide-y divide-gray-200 rounded-lg overflow-hidden shadow';
+                table.innerHTML = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Kategori</th>
+                            <th scope="col" class="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                    </tbody>
+                `;
+
+                const tbody = table.querySelector('tbody');
+                paginatedCategories.forEach(category => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${category.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-center space-x-2">
+                            <button class="edit-category-button icon-button px-3 py-1 bg-yellow-500 text-white rounded-md text-sm hover:bg-yellow-600"
+                                    data-category-id="${category.id}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-category-button icon-button px-3 py-1 bg-red-500 text-white rounded-md text-sm hover:bg-red-600"
+                                    data-category-id="${category.id}">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                categoryTableContainer.appendChild(table);
+                attachCategoryTableEventListeners();
+            }
+            updateCategoryPaginationControls(filteredCategories.length); // Pass filtered length for correct total pages
+        }
+
+        /**
+         * Updates the state of category pagination buttons and info.
+         * @param {number} totalItems - The total number of items after filtering.
+         */
+        function updateCategoryPaginationControls(totalItems) {
+            const totalPages = Math.ceil(totalItems / categoriesPerPage);
+            categoryPageInfoSpan.textContent = `Halaman ${currentCategoryPage} dari ${totalPages}`;
+
+            categoryPrevPageButton.disabled = currentCategoryPage === 1;
+            categoryNextPageButton.disabled = currentCategoryPage === totalPages;
+
+            if (totalItems === 0) {
+                categoryPaginationControls.classList.add('hidden');
+            } else {
+                categoryPaginationControls.classList.remove('hidden');
+            }
+        }
+
+
+        // Event listeners for category pagination controls
+        categoriesPerPageSelect.addEventListener('change', (e) => {
+            categoriesPerPage = parseInt(e.target.value, 10);
+            currentCategoryPage = 1; // Reset to first page
+            renderCategoriesTable(categorySearchInput.value.trim()); // Re-render with current search term
+        });
+
+        categoryPrevPageButton.addEventListener('click', () => {
+            if (currentCategoryPage > 1) {
+                currentCategoryPage--;
+                renderCategoriesTable(categorySearchInput.value.trim()); // Re-render with current search term
+            }
+        });
+
+        categoryNextPageButton.addEventListener('click', () => {
+            const totalItems = categories.filter(cat => cat.name.toLowerCase().includes(categorySearchInput.value.trim().toLowerCase())).length;
+            const totalPages = Math.ceil(totalItems / categoriesPerPage);
+            if (currentCategoryPage < totalPages) {
+                currentCategoryPage++;
+                renderCategoriesTable(categorySearchInput.value.trim()); // Re-render with current search term
+            }
+        });
+
+
+        /**
+         * Attaches event listeners to edit and delete buttons in the category table.
+         */
+        function attachCategoryTableEventListeners() {
+            document.querySelectorAll('.edit-category-button').forEach(button => {
+                button.onclick = (e) => openEditCategoryModal(e.currentTarget.dataset.categoryId);
+            });
+            document.querySelectorAll('.delete-category-button').forEach(button => {
+                button.onclick = (e) => deleteCategory(e.currentTarget.dataset.categoryId);
+            });
+        }
+
+        /**
+         * Handles adding a new category.
+         * @param {Event} e - The form submission event.
+         */
+        categoryForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = categoryNameInput.value.trim();
+
+            if (!name) {
+                showMessage('Nama kategori tidak boleh kosong.', 'error');
+                return;
+            }
+
+            const existingCategory = categories.find(cat => cat.name.toLowerCase() === name.toLowerCase());
+            if (existingCategory) {
+                showMessage(`Kategori "${name}" sudah ada. Gunakan nama kategori unik.`, 'error');
+                return;
+            }
+
+            categories.push({ id: generateUniqueId(), name: name });
+            saveCategories();
+            renderCategoriesTable();
+            populateCategoryDropdowns(); // Update product forms dropdowns
+            categoryForm.reset();
+            showMessage('Kategori berhasil ditambahkan!', 'success');
+        });
+
+        /**
+         * Handles category search input.
+         */
+        categorySearchInput.addEventListener('input', () => {
+            currentCategoryPage = 1; // Reset page to 1 on new search
+            renderCategoriesTable(categorySearchInput.value.trim());
+        });
+        categorySearchButton.addEventListener('click', () => {
+            currentCategoryPage = 1; // Reset page to 1 on new search
+            renderCategoriesTable(categorySearchInput.value.trim());
+        });
+
+
+        /**
+         * Opens the edit category modal.
+         * @param {string} categoryId - The ID of the category to edit.
+         */
+        function openEditCategoryModal(categoryId) {
+            const categoryToEdit = categories.find(cat => cat.id === categoryId);
+            if (!categoryToEdit) {
+                showMessage('Kategori tidak ditemukan untuk diedit.', 'error');
+                return;
+            }
+            editCategoryIdInput.value = categoryToEdit.id;
+            editCategoryNameInput.value = categoryToEdit.name;
+            editCategoryModal.classList.remove('hidden');
+        }
+
+        /**
+         * Closes the edit category modal.
+         */
+        cancelCategoryEditButton.addEventListener('click', () => {
+            editCategoryModal.classList.add('hidden');
+        });
+
+        /**
+         * Handles submission of edit category form.
+         * @param {Event} e - The form submission event.
+         */
+        editCategoryForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const id = editCategoryIdInput.value;
+            const newName = editCategoryNameInput.value.trim();
+
+            if (!newName) {
+                showMessage('Nama kategori tidak boleh kosong.', 'error');
+                return;
+            }
+
+            const existingCategory = categories.find(cat => cat.name.toLowerCase() === newName.toLowerCase() && cat.id !== id);
+            if (existingCategory) {
+                showMessage(`Kategori "${newName}" sudah ada. Gunakan nama kategori unik.`, 'error');
+                return;
+            }
+
+            const categoryIndex = categories.findIndex(cat => cat.id === id);
+            if (categoryIndex > -1) {
+                categories[categoryIndex].name = newName;
+                saveCategories();
+                renderCategoriesTable();
+                populateCategoryDropdowns(); // Update product forms dropdowns
+                editCategoryModal.classList.add('hidden');
+                showMessage('Kategori berhasil diperbarui!', 'success');
+            } else {
+                showMessage('Kategori tidak ditemukan.', 'error');
+            }
+        });
+
+        /**
+         * Deletes a category by ID.
+         * If a category is deleted, products associated with it will have their category set to empty.
+         * @param {string} categoryId - The ID of the category to delete.
+         */
+        function deleteCategory(categoryId) {
+            // Check if any products are associated with this category
+            const productsInCategory = products.filter(p => p.category === categoryId);
+            if (productsInCategory.length > 0) {
+                if (!confirm(`Kategori ini memiliki ${productsInCategory.length} produk terkait. Hapus kategori ini akan menghapus kategori dari produk-produk tersebut. Lanjutkan?`)) {
+                    return;
+                }
+                // Remove category from associated products
+                products.forEach(p => {
+                    if (p.category === categoryId) {
+                        p.category = ''; // Set category to empty string
+                    }
+                });
+                saveProducts(); // Save updated products
+            }
+
+            if (confirm('Apakah Anda yakin ingin menghapus kategori ini?')) {
+                categories = categories.filter(cat => cat.id !== categoryId);
+                saveCategories();
+                renderCategoriesTable();
+                populateCategoryDropdowns(); // Update product forms dropdowns
+                renderProductsGrid(); // Refresh product display in case category name was shown
+                renderProductsTable(); // Refresh product table in case category name was shown
+                showMessage('Kategori berhasil dihapus!', 'success');
+            }
+        }
+
+
+        // --- Initial Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadProducts();
+            loadCategories(); // Load categories on initial load
+            populateCategoryDropdowns(); // Populate category dropdowns after loading categories
+            showPage(currentPage); // Show the initial page (POS)
+        });
+    </script>
+</body>
+</html>
